@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.antigravity-healer/
+.antigravity-test.log
+.cursor-healer/
+.cursor-test.log
+venv/
+.env

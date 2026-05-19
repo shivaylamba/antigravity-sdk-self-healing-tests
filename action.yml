@@ -1,0 +1,58 @@
+name: Antigravity Self-Healing Tests
+description: Repair failing tests with the Google Antigravity Python SDK.
+
+inputs:
+  gemini-api-key:
+    description: Gemini API key.
+    required: true
+  model:
+    description: Gemini model id.
+    required: false
+    default: gemini-3.5-flash
+  log-file:
+    description: Test log file relative to the target repository.
+    required: false
+    default: .antigravity-test.log
+  report:
+    description: Comma-separated report paths relative to the target repository.
+    required: false
+    default: test-results,playwright-report,coverage
+  test-command:
+    description: Command Antigravity should use for verification.
+    required: false
+    default: npm test
+  dry-run:
+    description: Analyze without editing files.
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Install action dependencies
+      shell: bash
+      run: |
+        pip install -r ${{ github.action_path }}/requirements.txt
+
+    - name: Run Antigravity self-healing agent
+      shell: bash
+      env:
+        GEMINI_API_KEY: ${{ inputs.gemini-api-key }}
+        GEMINI_MODEL: ${{ inputs.model }}
+        TEST_COMMAND: ${{ inputs.test-command }}
+      run: |
+        DRY_RUN_FLAG=""
+        if [ "${{ inputs.dry-run }}" = "true" ]; then
+          DRY_RUN_FLAG="--dry-run"
+        fi
+
+        PYTHONPATH="${{ github.action_path }}" python3 -m src.cli heal \
+          --log-file "${{ inputs.log-file }}" \
+          --report "${{ inputs.report }}" \
+          --test-command "${{ inputs.test-command }}" \
+          $DRY_RUN_FLAG
