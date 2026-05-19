@@ -33,7 +33,7 @@ jobs:
         id: tests
         continue-on-error: true
         run: |
-          PYTHONPATH=. pytest examples/sample-tests 2>&1 | tee .antigravity-test.log
+          PYTHONPATH=. pytest examples/sample-tests > .antigravity-test.log 2>&1
 
       - name: Ask Antigravity to repair
         if: steps.tests.outcome == 'failure'
