@@ -61,6 +61,8 @@ python -m src.cli heal \
   --api-key "$GEMINI_API_KEY"
 ```
 
+> `--test-command` should be a direct command (for example `pytest` or `go test ./...`) and not a shell pipeline.
+
 ### CI autonomous
 ```bash
 python -m src.cli heal \

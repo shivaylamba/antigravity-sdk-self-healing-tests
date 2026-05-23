@@ -64,13 +64,26 @@ def _normalize_values(config: Dict[str, Any]) -> Dict[str, Any]:
     safety = result.get("safety")
     if isinstance(safety, dict):
         if "maxHealingAttempts" in safety:
-            safety["maxHealingAttempts"] = int(safety["maxHealingAttempts"])
+            safety["maxHealingAttempts"] = _safe_int("maxHealingAttempts", safety["maxHealingAttempts"])
         if "maxPatchLines" in safety:
-            safety["maxPatchLines"] = int(safety["maxPatchLines"])
+            safety["maxPatchLines"] = _safe_int("maxPatchLines", safety["maxPatchLines"])
         if "rollbackOnGuardrailViolation" in safety:
-            value = str(safety["rollbackOnGuardrailViolation"]).lower()
-            safety["rollbackOnGuardrailViolation"] = value in ("1", "true", "yes", "on")
+            safety["rollbackOnGuardrailViolation"] = _safe_bool(safety["rollbackOnGuardrailViolation"])
     return result
+
+
+def _safe_int(field_name: str, value: Any) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError) as e:
+        raise ValueError(f"Invalid integer value for '{field_name}': {value}") from e
+
+
+def _safe_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    normalized = str(value).strip().lower()
+    return normalized in ("1", "true", "yes", "on")
 
 
 def merge_configs(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:

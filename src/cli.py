@@ -16,7 +16,6 @@ def parse_list_arg(val: Optional[str]) -> List[str]:
     return [item.strip() for item in val.split(",") if item.strip()]
 
 async def main_async() -> None:
-    register_builtin_adapters()
     parser = argparse.ArgumentParser(description="Antigravity self-healing tests CLI")
     subparsers = parser.add_subparsers(dest="command", help="Subcommand to run")
 
@@ -36,6 +35,7 @@ async def main_async() -> None:
     heal_parser.add_argument("--max-healing-attempts", type=int, help="Maximum healing attempts")
     heal_parser.add_argument("--allowed-paths", help="Comma-separated allowed file/path prefixes")
     heal_parser.add_argument("--max-patch-lines", type=int, help="Maximum changed lines allowed")
+    heal_parser.add_argument("--rollback-on-guardrail-violation", choices=["true", "false"], help="Rollback changes when guardrails fail")
     heal_parser.add_argument("--audit-log-path", help="Audit log path")
 
     # Server command parser
@@ -48,6 +48,7 @@ async def main_async() -> None:
     args = parser.parse_args()
 
     if args.command == "heal":
+        register_builtin_adapters()
         cwd = os.getcwd()
         cli_overrides = {
             "provider": args.provider,
@@ -60,6 +61,7 @@ async def main_async() -> None:
                 "maxHealingAttempts": args.max_healing_attempts,
                 "allowedPaths": parse_list_arg(args.allowed_paths),
                 "maxPatchLines": args.max_patch_lines,
+                "rollbackOnGuardrailViolation": args.rollback_on_guardrail_violation,
                 "auditLogPath": args.audit_log_path,
             },
         }

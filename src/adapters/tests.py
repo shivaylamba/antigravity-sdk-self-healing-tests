@@ -4,6 +4,8 @@ from typing import List, Optional
 from .base import TestAdapter
 from .registry import register_test_adapter
 
+MAX_FAILED_TESTS = 50
+
 
 class RegexTestAdapter:
     name = "generic"
@@ -67,12 +69,13 @@ def _extract_with_patterns(log_excerpt: Optional[str], patterns: List[str]) -> L
     if not log_excerpt:
         return []
     names = set()
+    compiled = [re.compile(pattern, re.IGNORECASE) for pattern in patterns]
     for line in log_excerpt.splitlines():
-        for pattern in patterns:
-            m = re.match(pattern, line, re.IGNORECASE)
+        for pattern in compiled:
+            m = pattern.match(line)
             if m:
                 names.add(m.group(1).strip())
-    return list(names)[:50]
+    return list(names)[:MAX_FAILED_TESTS]
 
 
 def auto_detect_test_adapter(command: Optional[str]) -> TestAdapter:

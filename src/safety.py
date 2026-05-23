@@ -1,7 +1,8 @@
 import os
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Tuple
+import shutil
 
 from .types import SafetyControls
 
@@ -10,7 +11,7 @@ from .types import SafetyControls
 class GuardrailResult:
     ok: bool
     reason: str = ""
-    changed_files: List[str] = None
+    changed_files: List[str] = field(default_factory=list)
     patch_lines: int = 0
 
 
@@ -52,7 +53,7 @@ def enforce_guardrails(cwd: str, controls: SafetyControls) -> GuardrailResult:
 
     if allowed_paths:
         for changed in changed_files:
-            if not any(changed == ap or changed.startswith(ap.rstrip("/") + "/") for ap in allowed_paths):
+            if not any(_is_allowed_path(changed, ap) for ap in allowed_paths):
                 return GuardrailResult(
                     ok=False,
                     reason=f"File outside allowed paths was modified: {changed}",
@@ -74,7 +75,33 @@ def enforce_guardrails(cwd: str, controls: SafetyControls) -> GuardrailResult:
 def rollback_changes(cwd: str, changed_files: List[str]) -> None:
     for path in changed_files or []:
         full_path = os.path.join(cwd, path)
-        if os.path.exists(full_path):
+        if _is_git_tracked(cwd, path):
             subprocess.run(["git", "--no-pager", "checkout", "--", path], cwd=cwd, check=False)
-        else:
-            subprocess.run(["git", "--no-pager", "clean", "-fd", "--", path], cwd=cwd, check=False)
+            continue
+        if os.path.isdir(full_path):
+            shutil.rmtree(full_path, ignore_errors=True)
+        elif os.path.isfile(full_path):
+            try:
+                os.remove(full_path)
+            except FileNotFoundError:
+                pass
+
+
+def _is_allowed_path(changed: str, allowed: str) -> bool:
+    normalized_changed = os.path.normpath(changed)
+    normalized_allowed = os.path.normpath(allowed.rstrip("/"))
+    if normalized_changed == normalized_allowed:
+        return True
+    return normalized_changed.startswith(normalized_allowed + os.sep)
+
+
+def _is_git_tracked(cwd: str, path: str) -> bool:
+    res = subprocess.run(
+        ["git", "--no-pager", "ls-files", "--error-unmatch", path],
+        cwd=cwd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=False,
+    )
+    return res.returncode == 0

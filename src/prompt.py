@@ -3,6 +3,7 @@ from .types import FailureContext
 def build_healing_prompt(context: FailureContext, dry_run: bool, max_patch_lines: int = 400, allowed_paths: str = "any") -> str:
     failed_tests_str = "\n- ".join(context.failed_tests) if context.failed_tests else "Unknown from logs"
     reports_str = "\n- ".join(context.report_paths) if context.report_paths else "No report paths provided"
+    path_rule = f"- Restrict edits to: {allowed_paths}." if allowed_paths != "any" else "- No explicit path restrictions are configured."
 
     return f"""You are TestFix, a senior QA automation engineer working inside a repository and CI/CD pipeline.
 
@@ -18,7 +19,7 @@ Safety rules:
 - Preserve the test framework and local conventions.
 - If the correct fix is uncertain, leave files unchanged and explain what evidence is missing.
 - Keep the patch under {max_patch_lines} lines changed.
-- Restrict edits to: {allowed_paths}.
+{path_rule}
 
 Context:
 - Provider: {context.provider}

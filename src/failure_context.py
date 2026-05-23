@@ -7,6 +7,8 @@ from .adapters.tests import auto_detect_test_adapter
 from .fs_utils import read_json_if_exists, read_text_if_exists, resolve_from, write_json
 
 MAX_LOG_CHARS = 12000
+ENV_ALLOWED_PREFIXES = ("GITHUB_", "CI_", "CIRCLE_", "JENKINS_", "BUILD_", "GIT_")
+ENV_REDACTION_MARKERS = ("TOKEN", "KEY", "SECRET", "PASSWORD")
 
 async def build_failure_context(
     cwd: str,
@@ -51,11 +53,7 @@ async def build_failure_context(
         "testCommand": loaded.get("testCommand") or test_command,
         "reportPaths": list(set(loaded.get("reportPaths", []) + report_paths)),
         "artifacts": loaded.get("artifacts", []),
-        "environment": loaded.get("environment") or {
-            k: v
-            for k, v in os.environ.items()
-            if k.startswith(("GITHUB_", "CI_", "CIRCLE_", "JENKINS_", "BUILD_", "GIT_"))
-        },
+        "environment": loaded.get("environment") or _safe_environment_subset(),
         "logExcerpt": loaded.get("logExcerpt") or log_excerpt,
         "rawEventPath": loaded.get("rawEventPath") or os.environ.get("GITHUB_EVENT_PATH"),
     }
@@ -134,3 +132,16 @@ def read_github_environment() -> Dict[str, Optional[str]]:
         "runUrl": f"{server_url}/{repository}/actions/runs/{run_id}" if repository and run_id else None,
         "jobName": os.environ.get("GITHUB_JOB"),
     }
+
+
+def _safe_environment_subset() -> Dict[str, str]:
+    result: Dict[str, str] = {}
+    for k, v in os.environ.items():
+        if not k.startswith(ENV_ALLOWED_PREFIXES):
+            continue
+        key_parts = k.split("_")
+        if any(marker in key_parts or k.endswith(marker) for marker in ENV_REDACTION_MARKERS):
+            result[k] = "***REDACTED***"
+        else:
+            result[k] = v
+    return result

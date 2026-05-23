@@ -129,7 +129,17 @@ class ManualAdapter:
 
 def _safe_subset(environ: Dict[str, str]) -> Dict[str, str]:
     allowed_prefixes = ("GITHUB_", "CI_", "CIRCLE_", "JENKINS_", "BUILD_", "GIT_")
-    return {k: v for k, v in environ.items() if k.startswith(allowed_prefixes)}
+    redaction_markers = ("TOKEN", "KEY", "SECRET", "PASSWORD")
+    result: Dict[str, str] = {}
+    for k, v in environ.items():
+        if not k.startswith(allowed_prefixes):
+            continue
+        key_parts = k.split("_")
+        if any(marker in key_parts or k.endswith(marker) for marker in redaction_markers):
+            result[k] = "***REDACTED***"
+        else:
+            result[k] = v
+    return result
 
 
 def auto_detect_provider(environ: Dict[str, str]) -> CIProviderAdapter:
