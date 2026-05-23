@@ -1,0 +1,17 @@
+stages:
+  - test
+
+test:
+  stage: test
+  script:
+    - pytest 2>&1 | tee .antigravity-test.log
+  after_script:
+    - |
+      if [ "$CI_JOB_STATUS" != "success" ]; then
+        python -m src.cli heal \
+          --provider gitlab-ci \
+          --log-file .antigravity-test.log \
+          --test-runner pytest \
+          --test-command "pytest" \
+          --mode ci-autonomous
+      fi

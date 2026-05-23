@@ -1,0 +1,22 @@
+pipeline {
+  agent any
+  stages {
+    stage('Test') {
+      steps {
+        sh 'pytest 2>&1 | tee .antigravity-test.log || true'
+      }
+    }
+    stage('Self-heal') {
+      steps {
+        sh '''
+          python -m src.cli heal \
+            --provider jenkins \
+            --log-file .antigravity-test.log \
+            --test-runner pytest \
+            --test-command "pytest" \
+            --mode ci-autonomous
+        '''
+      }
+    }
+  }
+}

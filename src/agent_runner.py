@@ -30,7 +30,13 @@ async def run_healing_agent(options: HealOptions) -> HealResult:
     try:
         async with Agent(config) as agent:
             conv_id = agent.conversation_id or str(uuid.uuid4())
-            prompt = build_healing_prompt(options.failure_context, options.dry_run)
+            allowed_paths = ", ".join(options.safety.allowed_paths) if options.safety.allowed_paths else "any"
+            prompt = build_healing_prompt(
+                options.failure_context,
+                options.dry_run,
+                max_patch_lines=options.safety.max_patch_lines,
+                allowed_paths=allowed_paths,
+            )
             
             print(f"Sending prompt to agent (Conversation ID: {conv_id})...")
             response = await agent.chat(prompt)

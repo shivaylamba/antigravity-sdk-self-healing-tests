@@ -10,7 +10,7 @@ from starlette.requests import Request
 import uvicorn
 
 from .types import HealOptions, FailureContext
-from .agent_runner import run_healing_agent
+from .orchestrator import run_healing_loop
 
 def verify_github_signature(body: bytes, header: Optional[str], secret: str) -> bool:
     if not header or not header.startswith("sha256="):
@@ -56,6 +56,9 @@ def github_payload_to_failure_context(event_name: str, payload: dict) -> Optiona
         commitSha=sha,
         runId=run_id,
         runUrl=run_url,
+        pipelineId=run_id,
+        pipelineUrl=run_url,
+        pipelineName=event_name,
         jobName=job_name,
         failedTests=[],
         reportPaths=[],
@@ -85,6 +88,7 @@ async def github_webhook(request: Request) -> JSONResponse:
         apiKey=app_state.api_key,
         model=app_state.model,
         runtime="local",
+        mode="webhook-server",
         cwd=os.getcwd(),
         repoUrl=context.repo_url,
         startingRef=context.branch or context.base_branch,
@@ -94,7 +98,7 @@ async def github_webhook(request: Request) -> JSONResponse:
     )
 
     # Spawn healing run in background
-    asyncio.create_task(run_healing_agent(options))
+    asyncio.create_task(run_healing_loop(options))
 
     return JSONResponse({
         "status": "started",
