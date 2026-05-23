@@ -1,0 +1,22 @@
+name: CI Self-Heal
+on:
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run tests
+        id: tests
+        continue-on-error: true
+        run: pytest 2>&1 | tee .antigravity-test.log
+      - name: Heal failing pipeline
+        if: steps.tests.outcome == 'failure'
+        run: |
+          python -m src.cli heal \
+            --provider github-actions \
+            --log-file .antigravity-test.log \
+            --test-runner pytest \
+            --test-command "pytest" \
+            --mode ci-autonomous

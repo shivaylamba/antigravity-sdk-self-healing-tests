@@ -1,111 +1,158 @@
-# Antigravity Self-Healing Tests
+# Antigravity Self-Healing Engine (CI-Agnostic)
 
-Repair failing test runs autonomously using the **Google Antigravity Python SDK**. This project is a Python-based replication of the Cursor-SDK self-healing test workflow.
+This project implements a **CI/CD-agnostic self-healing agent loop** powered by the Google Antigravity SDK.
 
-When your CI/CD tests fail, the Antigravity Agent:
-1. Inspects the workspace, test log files, and report paths.
-2. Formulates the likely root cause.
-3. Automatically applies the minimum necessary code or test fixes.
-4. Executes the verification command locally to confirm it passes.
-5. Emits the summary of changes and results.
+It supports:
+- Multiple CI providers (GitHub Actions, GitLab CI, Jenkins, CircleCI, manual/local)
+- Multiple test runner styles (pytest, jest, playwright, maven/junit, go test, generic)
+- Config layers (config file → environment variables → CLI overrides)
+- Execution modes (local dry-run, local apply, CI autonomous, webhook server)
+- Safety guardrails (attempt limits, allowed path constraints, patch-size limits, rollback, audit log)
+
+---
+
+## Architecture
+
+Core flow:
+1. **Detect** CI/runtime context through provider adapters
+2. **Analyze** logs and failure context
+3. **Patch** via Antigravity agent
+4. **Verify** with configured test command
+5. **Report** outputs and audit entries
+
+Key modules:
+- `src/orchestrator.py`: end-to-end healing loop
+- `src/adapters/providers.py`: CI provider adapters
+- `src/adapters/tests.py`: test runner adapters
+- `src/adapters/vcs.py`: VCS integration abstraction
+- `src/config.py`: merged config loading/validation
+- `src/safety.py`: guardrails, rollback, change checks
 
 ---
 
 ## Installation
 
-Ensure you have Python 3.10+ installed.
-
 ```bash
 pip install -r requirements.txt
+pip install pytest
 ```
 
 ---
 
-## Local Usage
+## Quickstart
 
-Run tests and capture the logs:
-```bash
-pytest > .antigravity-test.log 2>&1
-```
-
-If it fails, invoke the healer agent:
+### Local dry-run
 ```bash
 python -m src.cli heal \
+  --mode local-dry-run \
   --log-file .antigravity-test.log \
   --test-command "pytest" \
-  --api-key "YOUR_GEMINI_API_KEY"
+  --api-key "$GEMINI_API_KEY"
 ```
 
-### CLI Options
+### Local apply
+```bash
+python -m src.cli heal \
+  --mode local-apply \
+  --provider manual \
+  --test-runner pytest \
+  --log-file .antigravity-test.log \
+  --test-command "pytest" \
+  --api-key "$GEMINI_API_KEY"
+```
 
-- `heal`:
-  - `--log-file`: Path to the test output logs (default: `.antigravity-test.log`).
-  - `--report`: Comma-separated list of paths to check (default: `test-results,playwright-report,coverage`).
-  - `--test-command`: Verification command to execute after changes (default: value of `$TEST_COMMAND` or `npm test`).
-  - `--dry-run`: Evaluate and report the failure without performing file edits.
-  - `--model`: Gemini model (default: `$GEMINI_MODEL` or `gemini-3.5-flash`).
-  - `--api-key`: Gemini API Key (default: `$GEMINI_API_KEY` or `$CURSOR_API_KEY`).
-  - `--failure-file`: Override failure JSON path.
-- `server`:
-  - `--port`: Webhook port to listen on (default: `8787` or `$PORT`).
-  - `--model`: Gemini model.
-  - `--api-key`: Gemini API key.
-  - `--webhook-secret`: Optional webhook signature secret.
+### CI autonomous
+```bash
+python -m src.cli heal \
+  --mode ci-autonomous \
+  --provider github-actions \
+  --log-file .antigravity-test.log \
+  --test-command "pytest" \
+  --api-key "$GEMINI_API_KEY"
+```
+
+### Webhook server mode
+```bash
+python -m src.cli server --port 8787 --api-key "$GEMINI_API_KEY"
+```
 
 ---
 
-## GitHub Actions Workflow Integration
+## Configuration
 
-Include the action in your repository workflow to automatically submit PRs with fixes:
+Default file: `.antigravity-healer/config.json`
 
-```yaml
-name: Self-healing tests
+Precedence (highest to lowest):
+1. CLI flags
+2. Environment variables
+3. Config file
 
-on:
-  pull_request:
+Example:
+```json
+{
+  "provider": "github-actions",
+  "testRunner": "pytest",
+  "testCommand": "pytest",
+  "mode": "ci-autonomous",
+  "safety": {
+    "maxHealingAttempts": 2,
+    "allowedPaths": ["src", "tests"],
+    "maxPatchLines": 250,
+    "rollbackOnGuardrailViolation": true,
+    "auditLogPath": ".antigravity-healer/audit.log"
+  }
+}
+```
 
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+---
 
-      - name: Run tests
-        id: tests
-        continue-on-error: true
-        run: |
-          pytest 2>&1 | tee .antigravity-test.log
+## Adapter Extension Guide
 
-      - name: Ask Antigravity to repair
-        if: steps.tests.outcome == 'failure'
-        uses: shivaylamba/antigravity-self-healing-tests@v1
-        with:
-          gemini-api-key: ${{ secrets.GEMINI_API_KEY }}
-          model: gemini-3.5-flash
-          log-file: .antigravity-test.log
-          test-command: pytest
+Add custom implementations for:
+- `CIProviderAdapter` (`src/adapters/base.py`)
+- `TestAdapter` (`src/adapters/base.py`)
+- `VCSAdapter` (`src/adapters/base.py`)
 
-      - name: Detect changes
-        if: steps.tests.outcome == 'failure'
-        id: changes
-        run: |
-          if [ -n "$(git status --porcelain)" ]; then
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-          fi
+Register them in `src/adapters/registry.py` (or call custom register functions at startup).
 
-      - name: Create repair pull request
-        if: steps.tests.outcome == 'failure' && steps.changes.outputs.changed == 'true'
-        uses: peter-evans/create-pull-request@v6
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          branch: antigravity/self-heal-${{ github.run_id }}
-          title: "test: self-heal failing tests"
-          body-path: .antigravity-healer/result.md
-          add-paths: |
-            .
-            :!.antigravity-healer/**
-            :!.antigravity-test.log
+---
+
+## CI & Test Templates
+
+- CI templates: `examples/ci/`
+  - GitHub Actions
+  - GitLab CI
+  - Jenkins
+  - CircleCI
+- Test runner templates: `examples/test-runners/README.md`
+
+---
+
+## Security & Operations
+
+Guardrails include:
+- Maximum healing attempts
+- Allowed paths for changes
+- Maximum patch size
+- Rollback when guardrails fail
+- Append-only audit log for every run
+
+Recommended:
+- Run with least-privilege tokens
+- Keep `allowedPaths` narrowly scoped
+- Use dry-run in production rollout phases first
+
+---
+
+## Release Plan
+
+### MVP (current)
+- Multi-provider CI adapter baseline
+- Multi-runner failure inference baseline
+- Config layering and safety controls
+- CLI/server orchestration
+
+### Next milestones
+- Robust VCS PR/MR adapters (GitHub/GitLab APIs)
+- Rich artifact/report collectors per provider
+- Enterprise controls (policy packs, approvals, observability integrations)

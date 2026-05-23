@@ -3,6 +3,7 @@ import re
 import subprocess
 from typing import List, Optional, Dict, Any
 from .types import FailureContext
+from .adapters.tests import auto_detect_test_adapter
 from .fs_utils import read_json_if_exists, read_text_if_exists, resolve_from, write_json
 
 MAX_LOG_CHARS = 12000
@@ -28,9 +29,16 @@ async def build_failure_context(
     git_context = await read_git_context(cwd)
     github_env = read_github_environment()
 
+    provider_value = loaded.get("provider") or provider or ("github-actions" if os.environ.get("GITHUB_ACTIONS") else "manual")
+    detected_adapter = auto_detect_test_adapter(test_command)
+    failed_tests = loaded.get("failedTests") or detected_adapter.infer_failed_tests(log_excerpt)
+
     # Merge contexts
     context_data = {
-        "provider": loaded.get("provider") or provider or "github-actions",
+        "provider": provider_value,
+        "pipelineId": loaded.get("pipelineId") or github_env.get("runId"),
+        "pipelineUrl": loaded.get("pipelineUrl") or github_env.get("runUrl"),
+        "pipelineName": loaded.get("pipelineName") or os.environ.get("GITHUB_WORKFLOW"),
         "repository": loaded.get("repository") or github_env.get("repository"),
         "repoUrl": loaded.get("repoUrl") or github_env.get("repoUrl") or git_context.get("remoteUrl"),
         "branch": loaded.get("branch") or github_env.get("branch") or git_context.get("branch"),
@@ -39,9 +47,15 @@ async def build_failure_context(
         "runId": loaded.get("runId") or github_env.get("runId"),
         "runUrl": loaded.get("runUrl") or github_env.get("runUrl"),
         "jobName": loaded.get("jobName") or github_env.get("jobName"),
-        "failedTests": loaded.get("failedTests") or infer_failed_tests(log_excerpt),
+        "failedTests": failed_tests,
         "testCommand": loaded.get("testCommand") or test_command,
         "reportPaths": list(set(loaded.get("reportPaths", []) + report_paths)),
+        "artifacts": loaded.get("artifacts", []),
+        "environment": loaded.get("environment") or {
+            k: v
+            for k, v in os.environ.items()
+            if k.startswith(("GITHUB_", "CI_", "CIRCLE_", "JENKINS_", "BUILD_", "GIT_"))
+        },
         "logExcerpt": loaded.get("logExcerpt") or log_excerpt,
         "rawEventPath": loaded.get("rawEventPath") or os.environ.get("GITHUB_EVENT_PATH"),
     }

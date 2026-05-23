@@ -25,6 +25,30 @@ inputs:
     description: Analyze without editing files.
     required: false
     default: "false"
+  provider:
+    description: CI provider adapter (github-actions, gitlab-ci, jenkins, circleci, manual).
+    required: false
+    default: github-actions
+  test-runner:
+    description: Test runner adapter (pytest, jest, playwright, maven-surefire, go-test, generic).
+    required: false
+    default: generic
+  mode:
+    description: Execution mode (local-dry-run, local-apply, ci-autonomous).
+    required: false
+    default: ci-autonomous
+  max-healing-attempts:
+    description: Maximum healing attempts before failing.
+    required: false
+    default: "1"
+  allowed-paths:
+    description: Comma-separated allowed paths for edits.
+    required: false
+    default: ""
+  max-patch-lines:
+    description: Maximum total changed lines allowed.
+    required: false
+    default: "400"
 
 runs:
   using: composite
@@ -55,4 +79,10 @@ runs:
           --log-file "${{ inputs.log-file }}" \
           --report "${{ inputs.report }}" \
           --test-command "${{ inputs.test-command }}" \
+          --provider "${{ inputs.provider }}" \
+          --test-runner "${{ inputs.test-runner }}" \
+          --mode "${{ inputs.mode }}" \
+          --max-healing-attempts "${{ inputs.max-healing-attempts }}" \
+          --allowed-paths "${{ inputs.allowed-paths }}" \
+          --max-patch-lines "${{ inputs.max-patch-lines }}" \
           $DRY_RUN_FLAG

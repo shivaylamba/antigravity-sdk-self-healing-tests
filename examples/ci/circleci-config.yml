@@ -1,0 +1,21 @@
+version: 2.1
+jobs:
+  test:
+    docker:
+      - image: cimg/python:3.12
+    steps:
+      - checkout
+      - run: pytest 2>&1 | tee .antigravity-test.log || true
+      - run:
+          name: Heal failing tests
+          command: |
+            python -m src.cli heal \
+              --provider circleci \
+              --log-file .antigravity-test.log \
+              --test-runner pytest \
+              --test-command "pytest" \
+              --mode ci-autonomous
+workflows:
+  test-and-heal:
+    jobs:
+      - test
