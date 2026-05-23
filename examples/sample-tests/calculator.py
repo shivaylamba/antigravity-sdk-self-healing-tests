@@ -5,8 +5,7 @@ def subtract(a: float, b: float) -> float:
     return a - b
 
 def multiply(a: float, b: float) -> float:
-    # BUG: addition instead of multiplication
-    return a + b
+    return a * b
 
 def divide(a: float, b: float) -> float:
     if b == 0:
